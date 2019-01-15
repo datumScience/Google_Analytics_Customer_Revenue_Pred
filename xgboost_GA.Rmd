@@ -1,0 +1,117 @@
+```{r}
+library(readr)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(Hmisc)
+library(party)
+library(MLmetrics)
+library(xgboost)
+library(readr)
+library(stringr)
+library(caret)
+library(devtools)
+library(mlr)
+library(parallel)
+library(parallelMap)
+
+library(tidyverse)
+library(jsonlite)
+library(scales)
+library(lubridate)
+library(repr)
+library(ggrepel)
+library(gridExtra)
+library(dplyr)
+library(onehot)
+library(glmnet)
+library(Metrics)
+```
+```{r}
+library(splitstackshape)
+data <- read.csv("train_new.csv")
+
+set.seed(123)
+
+smp_size <- floor(0.75 * nrow(data))
+train_ind <- sample(seq_len(nrow(data)), size = smp_size)
+
+train <- stratified(data, "logPrediction", .75)
+test <-  stratified(data, "logPrediction", .25)
+
+train <- data[train_ind, ]
+test <- data[-train_ind, ]
+
+glimpse(train)
+
+table(train$logPrediction)
+
+```
+
+```{r}
+
+encoder_train <- onehot(train,max_levels = 300)
+encoder_test <- onehot(test,max_levels = 300)
+
+x_train <- predict(encoder_train, train)
+x_test <- predict(encoder_test, test)
+
+x_train <- as.data.frame(x_train)
+x_test <- as.data.frame(x_test)
+
+set.seed(123)
+
+cv_lasso = cv.glmnet(as.matrix(x_train[, -361]), x_train[, 361])
+
+## Predictions
+preds <- predict(cv_lasso, newx = as.matrix(Validation[, -59]), s = "lambda.min")
+rmse(Validation$SalePrice, preds)
+
+lrn <- makeLearner("regr.xgboost",predict.type = "response")
+lrn$par.vals <- list( objective="reg:linear", eval_metric="rmse", nrounds=100L, eta=0.1)
+params <- makeParamSet( makeDiscreteParam("booster",values = c("gbtree")), makeIntegerParam("max_depth",lower = 3L,upper = 10L), makeNumericParam("min_child_weight",lower = 1L,upper = 10L), makeNumericParam("subsample",lower = 0.5,upper = 1), makeNumericParam("colsample_bytree",lower = 0.5,upper = 1))
+
+rdesc <- makeResampleDesc("CV",stratify = T,iters=5L)
+ctrl <- makeTuneControlRandom(maxit =100L)
+
+summary(train)
+
+Independent_variable <- x_train[,1:20]
+Independent_variable
+dependent_variable <- x_train[,21]
+dependent_variable
+laa<- lars(Independent_variable,Dependent_Variable,type = 'lasso')
+
+x_train = as.data.frame(x_train)
+x_test = as.data.frame(x_test)
+
+View(x_train)
+
+x_train$IsTransactionComplete = as.factor(x_train$IsTransactionComplete)
+x_test$IsTransactionComplete = as.factor(x_test$IsTransactionComplete)
+
+colnames(x_train) <- make.names(colnames(x_train),unique = T)
+colnames(x_test) <- make.names(colnames(x_test),unique = T)
+
+#trainTask <- makeClassifTask(data=x_train,target = "logPrediction")
+#testTask <-  makeClassifTask(data=x_test,target = "logPrediction")
+
+xgbFit = xgboost(data = as.matrix(Training[, -59]), nfold = 5, label = as.matrix(Training$SalePrice), 
+    nrounds = 2200, verbose = FALSE, objective = "reg:linear", eval_metric = "rmse", 
+    nthread = 8, eta = 0.01, gamma = 0.0468, max_depth = 6, min_child_weight = 1.7817, 
+    subsample = 0.5213, colsample_bytree = 0.4603)
+
+parallelStartSocket(cpus = detectCores())
+
+
+mytune <- tuneParams(learner = lrn, task = trainTask, resampling = rdesc, measures = acc, par.set = params, control = ctrl, show.info = T)
+mytune
+lrn_tune <- setHyperPars(lrn,par.vals = mytune$x)
+xgmodel <- train(learner = lrn_tune,task = trainTask)
+xgmodel
+
+xgpred <- predict(xgmodel,testTask,type="prob")
+confusionMatrix(xgpred[["data"]][["response"]],xgpred[["data"]][["truth"]])
+
+```
+

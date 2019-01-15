@@ -1,0 +1,64 @@
+
+```{r}
+library(tidyverse)
+library(jsonlite)
+library(scales)
+library(lubridate)
+library(repr)
+library(ggrepel)
+library(gridExtra)
+library(dplyr)
+library(ROSE)
+library(magrittr)
+```
+
+```{r}
+train <- read_csv("train.csv")
+head(train)
+
+
+table(train$IsTransactionComplete)
+print(nrow(train))
+
+
+column <- c("Column 1")
+  
+
+
+train %<>% select(-one_of(column))
+
+factorVars <- c("channelGrouping", "browser", "operatingSystem", "deviceCategory", "country" , "IsTransactionComplete")
+
+train[,factorVars] <- lapply(train[,factorVars],as.factor)
+
+glimpse(train$IsTransactionComplete)
+train$date <- ymd(train$date)
+
+y <- train[, 1]
+train[,1]
+glimpse(y)
+n <- length(y)
+print(n)
+
+length(y$channelGrouping)
+length(y)
+
+data(hacide)
+
+glimpse(train)
+glimpse(hacide.train)
+
+numVars <- c( "hits", "bounces", "pageviews", "newVisits")
+train[, numVars] <- lapply(train[, numVars], as.integer)
+train$transactionRevenue <- as.numeric(train$transactionRevenue)
+train$logPrediction <- as.numeric(train$logPrediction)
+
+
+train$visitStartTime <- as.POSIXct(train$visitStartTime, tz="UTC", origin='1970-01-01')
+
+table(train$IsTransactionComplete)
+length(train$IsTransactionComplete)
+
+
+```
+
